@@ -1,6 +1,6 @@
 var app = {};
 
-app.locations = [
+app.initialLocations = [
   { title: 'My House', location: { lat: -32.906838, lng: 151.748455 } },
   { title: 'Birdy\'s Cafe', location: { lat: -32.907900, lng: 151.748186 } },
   { title: 'Suspension Espresso', location: { lat: -32.917224, lng: 151.749160 } },
@@ -15,62 +15,173 @@ app.initMap = function() {
   // Constructor creates a new map - only center and zoom are required.
   // centers on the first element in locations array
   app.map = new google.maps.Map(document.getElementById('map'), {
-    center: app.locations[0].location,
+    center: app.initialLocations[0].location,
     zoom: 15
   });
 
-  var largeInfowindow = new google.maps.InfoWindow();
-  var bounds = new google.maps.LatLngBounds();
-
-  // Create a marker per location, and create an array of markers.
-  // *Modified from course
-  const markers = app.locations.map(function(item, index) {
-
-    const marker = new google.maps.Marker({
-      map: app.map,
-      position: item.location,
-      title: item.title,
-      animation: google.maps.Animation.DROP,
-      id: index
-    });
-
-    marker.addListener('click', function() {
-      animateMarker(this);
-      populateInfoWindow(marker, largeInfowindow)
-    });
-
-    bounds.extend(marker.position);
-    return marker;
-  });
-
-  app.map.fitBounds(bounds);
-
-  function animateMarker(marker) {
-    marker.setAnimation(google.maps.Animation.BOUNCE);
-    setTimeout(function(){
-      marker.setAnimation(null);
-    }, 700);
-  }
-
-  // This function populates the infowindow when the marker is clicked. We'll only allow
-  // one infowindow which will open at the marker that is clicked, and populate based
-  // on that markers position.
-  // *Copied from course
-  function populateInfoWindow(marker, infowindow) {
-    // Check to make sure the infowindow is not already opened on this marker.
-    if (infowindow.marker != marker) {
-      infowindow.marker = marker;
-      infowindow.setContent('<div>' + marker.title + '</div>');
-      infowindow.open(map, marker);
-      // Make sure the marker property is cleared if the infowindow is closed.
-      infowindow.addListener('closeclick', function() {
-        infowindow.setMarker = null;
-      });
-    }
-  }
-
+  ko.applyBindings(new app.ViewModel());
 }
 
-function initMap() {
-  app.initMap();
+document.addEventListener('DOMContentLoaded', function(event) {
+  //click handler for options box minimize toggle
+  document.querySelector('#optionsBoxToggle').addEventListener('click', function(event) {
+    event.target.parentNode.classList.toggle('options-box-minimized');
+  });
+});
+
+app.Location = function(data) {
+
+  this.title = ko.observable(data.title);
+  this.lat = ko.observable(data.location.lat);
+  this.lng = ko.observable(data.location.lng);
+  this.address = ko.observable('');
+  this.wikipediaIntro = ko.observable('');
+  this.loaded = false;
+
+  this.marker = new google.maps.Marker({
+    map: app.map,
+    position: data.location,
+    title: data.title,
+    animation: google.maps.Animation.DROP
+  });
+
+};
+
+app.ViewModel = function() {
+
+  var self = this;
+
+  this.locations = ko.observableArray([]);
+  app.initialLocations.forEach(function(item, index) {
+    self.locations.push(new app.Location(item));
+  });
+
+  this.selectedLocation = ko.observable();
+
+  //show a loading message while we're getting async data
+  this.loadingStatus = ko.observable('Loading...');
+
+  //filters list and adjusts markers input
+  this.filter = ko.observable();
+  this.filteredLocations = ko.computed(function() {
+
+    var bounds = new google.maps.LatLngBounds();
+
+    const filtered = this.locations().filter(function(location) {
+      if (!self.filter() || location.title().toLowerCase().indexOf(self.filter().toLowerCase()) !== -1) {
+        location.marker.setMap(app.map);
+        bounds.extend(location.marker.position);
+        return location;
+      } else {
+        location.marker.setMap(null);
+      }
+    });
+
+    app.map.fitBounds(bounds);
+    app.map.setZoom(Math.min(app.map.getZoom(), 15));
+
+    return filtered;
+  }, this);
+
+  //show first location after filtering
+  ko.computed(function() {
+    self.selectedLocation(self.filteredLocations()[0]);
+  }, this);
+
+  //change selectedLocation and animate location's marker
+  this.selectLocation = function(locationIndex) {
+    self.selectedLocation(self.filteredLocations()[locationIndex()]);
+    animateMarker(self.selectedLocation().marker);
+  }
+
+  //load the first location
+  this.selectLocation(function() { return 0; });
+
+  //load address and wikipedia data when selected location changes, and store it on location obj
+  ko.computed(function() {
+
+    const location = self.selectedLocation();
+
+    if (location.loaded) { return; }
+
+    getLocalityInfoFromGoogle();
+
+    function getLocalityInfoFromGoogle() {
+
+      self.loadingStatus('Loading...');
+
+      const googleGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${location.lat()},${location.lng()}&key=AIzaSyAFc11aYXpKunavDkM8nxAI0rZyn--Z7fk`
+
+      fetch(googleGeocodeUrl).then(resp => {
+        if (resp.ok) {
+          return resp.json();
+        } else {
+          throw 'Failed to retrieve location data.';
+        }
+      }).then(data => {
+
+        try {
+          const localityAreaCountry = data.results[0].address_components.reduce((acc, item, index) => {
+            if (item.types.includes('locality')) { acc.locality = item.long_name; }
+            if (item.types.includes('administrative_area_level_1')) { acc.area = item.long_name; }
+            if (item.types.includes('country')) { acc.country = item.long_name; }
+            return acc;
+          }, {});
+
+          self.selectedLocation().address(data.results[0].formatted_address);
+
+          loadWikipediaData(localityAreaCountry);
+        } catch (err) {
+          throw 'Failed to parse location data.';
+        }
+      }).catch(err => {
+        self.loadingStatus(err + ' Try refreshing.')
+      });
+    }
+
+    function loadWikipediaData(lAC) {
+
+      const wikipediaUrl = 'https://en.wikipedia.org/w/api.php?&origin=*&action=query&list=search&format=json&srsearch=';
+
+      fetch(`${wikipediaUrl}${lAC.locality}+,${lAC.area}+,${lAC.country}`).then(function(resp) {
+        if (resp.ok) {
+          return resp.json();
+        } else {
+          throw 'Failed to retrieve Wikpedia snippet.';
+        }
+      }).then(function(data) {
+        try {
+          const locationResult = data.query.search[0];
+          const locationPageLink = `<a href="${'https:\/\/en.wikipedia.org\/wiki\/' + locationResult.title.replace(' ', '_')}">...</a>`;
+          self.selectedLocation().wikipediaIntro(locationResult.snippet + locationPageLink);
+          self.selectedLocation().loaded = true;
+          self.loadingStatus('');
+        } catch (err) {
+          throw 'Failed to retrieve Wikpedia snippet.';
+        }
+      }).catch(err => {
+        self.loadingStatus(err + ' Try refreshing.')
+      })
+
+    }
+  }, this);
+
+  function animateMarker(marker) {
+
+    //cancel any existing bouncing
+    self.lastMarker && self.lastMarker.setAnimation(null)
+
+    marker.setAnimation(google.maps.Animation.BOUNCE);
+
+    //stop bouncing after bouncePeriod multiple
+    const bouncePeriod = 700; // derived by trial-and-error
+    const bounces = 6;
+    setTimeout(function() {
+      marker.setAnimation(null);
+    }, bouncePeriod * bounces);
+
+    //remember the marker so we can cancel its bouncing if the user changes selection
+    self.lastMarker = marker;
+  }
+
 }
