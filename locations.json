@@ -1,0 +1,64 @@
+[
+{
+  "title": "My House",
+  "location":
+  {
+    "lat": -32.906838,
+    "lng": 151.748455
+  },
+  "getDataFrom": "Wikipedia"
+},
+{
+  "title": "Birdy's Cafe",
+  "location":
+  {
+    "lat": -32.9079,
+    "lng": 151.748186
+  },
+  "getDataFrom": "Foursquare"
+},
+{
+  "title": "Suspension Espresso",
+  "location":
+  {
+    "lat": -32.917224,
+    "lng": 151.74916
+  },
+  "getDataFrom": "Foursquare"
+},
+{
+  "title": "Islington Park Playground",
+  "location":
+  {
+    "lat": -32.91252,
+    "lng": 151.74781
+  },
+  "getDataFrom": "Foursquare"
+},
+{
+  "title": "Aunty Emma's House",
+  "location":
+  {
+    "lat": -32.897508,
+    "lng": 151.739595
+  },
+  "getDataFrom": "Wikipedia"
+},
+{
+  "title": "Hamilton Station",
+  "location":
+  {
+    "lat": -32.91848,
+    "lng": 151.748464
+  },
+  "getDataFrom": "Foursquare"
+},
+{
+  "title": "Work",
+  "location":
+  {
+    "lat": -32.925363,
+    "lng": 151.771947
+  },
+  "getDataFrom": "Wikipedia"
+}]

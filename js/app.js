@@ -1,43 +1,42 @@
 var app = {};
 
-app.initialLocations = [
-  { title: 'My House', location: { lat: -32.906838, lng: 151.748455 } },
-  { title: 'Birdy\'s Cafe', location: { lat: -32.907900, lng: 151.748186 } },
-  { title: 'Suspension Espresso', location: { lat: -32.917224, lng: 151.749160 } },
-  { title: 'Islington Park Playground', location: { lat: -32.912520, lng: 151.747810 } },
-  { title: 'Aunty Emma\'s House', location: { lat: -32.897508, lng: 151.739595 } },
-  { title: 'Hamilton Station', location: { lat: -32.918480, lng: 151.748464 } },
-  { title: 'Work', location: { lat: -32.925363, lng: 151.771947 } },
-];
+(function() {
+
+  document.addEventListener('DOMContentReady', function(event) {
+    document.querySelector('#mapsAPI').addEventListener('error', function(event) {
+      console.log('Failed to load maps api. try refreshing');
+    });
+  });
+
+})();
+
+app.foursquareKeys = {
+  CLIENT_ID: "VQITOXTPPELG4GSH0BTPLMCQP5EZTCTRZXKJSM5DQ2LWXOTR",
+  CLIENT_SECRET: "CRYGV5LHJRT0PFWG35JBMTZ0Y3FBEVLBEJTMQMAGS1YFZE30"
+};
+
+//handler for maps api not loading correctly
+app.mapsAPIError = function() {
+  app.mapsAPIErrorOccurred = true;
+  ko.applyBindings(new app.ViewModel());
+};
 
 app.initMap = function() {
-
-  // Constructor creates a new map - only center and zoom are required.
-  // centers on the first element in locations array
-  app.map = new google.maps.Map(document.getElementById('map'), {
-    center: app.initialLocations[0].location,
-    zoom: 15
-  });
 
   app.infowindow = new google.maps.InfoWindow();
 
   ko.applyBindings(new app.ViewModel());
 };
 
-document.addEventListener('DOMContentLoaded', function(event) {
-  //click handler for options box minimize toggle
-  document.querySelector('#optionsBoxToggle').addEventListener('click', function(event) {
-    event.target.parentNode.classList.toggle('options-box-minimized');
-  });
-});
-
 app.Location = function(data) {
 
   this.title = ko.observable(data.title);
   this.lat = ko.observable(data.location.lat);
   this.lng = ko.observable(data.location.lng);
+  this.getDataFrom = data.getDataFrom;
   this.address = ko.observable('');
-  this.wikipediaIntro = ko.observable('');
+  this.foursquareInfo = ko.observable('');
+  this.wikipediaSnippet = ko.observable('');
   this.loaded = false;
 
 };
@@ -46,41 +45,47 @@ app.ViewModel = function() {
 
   var self = this;
 
-  this.locations = ko.observableArray([]);
-  app.initialLocations.forEach(function(item, index) {
+  //toggle minimized state of locations sidebar
+  self.locationsSidebarState = ko.observable('');
+  self.toggleLocationsSidebar = function(event) {
+    this.locationsSidebarState(this.locationsSidebarState() === '' ? 'locations-sidebar-minimized' : '');
+  };
 
-    var location = new app.Location(item);
-    location.marker = new google.maps.Marker({
-      map: app.map,
-      position: item.location,
-      title: item.title,
-      animation: google.maps.Animation.DROP,
-      id: index
-    });
+  //show error message if maps API has failed to load
+  self.errorMessage = ko.observable('');
+  if (app.mapsAPIErrorOccurred) {
+    self.errorMessage('Error loading Google Maps API. Try refreshing.');
+    return;
+  }
 
-    location.marker.addListener('click', function() {
-      self.selectedLocation(self.locations()[this.id]);
-      populateInfoWindow(this, app.infowindow);
-    });
+  self.locations = ko.observableArray([]);
+  self.initialLocationsLoaded = ko.observable(false);
 
-    self.locations.push(location);
+  getInitialLocations().then(data => {
+    createMapAndInitialMarkers(data);
+    self.initialLocationsLoaded(true);
+  }).catch(err => {
+    self.errorMessage(err);
   });
 
-  this.selectedLocation = ko.observable();
-
   //show a loading message while we're getting async data
-  this.loadingStatus = ko.observable('Loading...');
+  self.loadingStatus = ko.observable('Loading...');
 
   //filters list and adjusts markers based on input
-  this.filter = ko.observable();
-  this.filteredLocations = ko.computed(function() {
+  self.filter = ko.observable();
 
-    var bounds = new google.maps.LatLngBounds();
+  //build our filtered array
+  self.filteredLocations = ko.computed(function() {
 
-    const filtered = this.locations().filter(function(location, index) {
+    //return empty array if our initial locations haven't finished loading
+    if (!self.initialLocationsLoaded()) { return []; }
+
+    app.mapBounds = new google.maps.LatLngBounds();
+
+    const filtered = self.locations().filter(function(location, index) {
       if (!self.filter() || location.title().toLowerCase().indexOf(self.filter().toLowerCase()) !== -1) {
         location.marker.setMap(app.map);
-        bounds.extend(location.marker.position);
+        app.mapBounds.extend(location.marker.position);
         return location;
       } else {
         location.marker.setMap(null);
@@ -88,31 +93,99 @@ app.ViewModel = function() {
     });
 
     //fit all of the markers on the map, but with a maximum zoom of 15
-    app.map.fitBounds(bounds);
-    app.map.setZoom(Math.min(app.map.getZoom(), 15));
+    if (app.map) {
+      app.map.fitBounds(app.mapBounds);
+      app.map.setZoom(Math.min(app.map.getZoom(), 15));
+    }
 
     return filtered;
-  }, this);
+  }, self);
+
+  self.selectedLocation = ko.observable();
+
+  //change selectedLocation and animate location's marker
+  self.selectLocation = function(locationIndex) {
+    self.selectedLocation(self.filteredLocations()[locationIndex()]);
+  };
 
   //select first location after filtering
   ko.computed(function() {
     self.selectedLocation(self.filteredLocations()[0]);
-  }, this);
+  }, self);
 
-  //change selectedLocation and animate location's marker
-  this.selectLocation = function(locationIndex) {
-    self.selectedLocation(self.filteredLocations()[locationIndex()]);
-  };
+  //load the first location
+  self.selectLocation(function() { return 0; });
 
-  //animate the marker when the selected location changes
+  function getInitialLocations() {
+    const locationsJSONUrl = 'locations.json';
+    return fetch(locationsJSONUrl)
+      .then(resp => {
+        if (resp.ok) {
+          return resp.json();
+        } else {
+          throw `Failed to retrieve ${locationsJSONUrl}. Please check that the file exists and try refreshing.`;
+        }
+      })
+      .catch(err => {
+        if (err.stack && err.stack.indexOf('SyntaxError') === 0) {
+          throw `Failed to parse ${locationsJSONUrl}. ${err}`;
+        } else {
+          throw err;
+        }
+      })
+      .then(data => {
+        if (!(data.length && data[0].location)) { throw `Incorrectly formatted ${locationsJSONUrl}`; }
+        return data;
+      });
+  }
+
+  function createMapAndInitialMarkers(data) {
+
+    // Constructor creates a new map - only center and zoom are required.
+    // centers on the first element in locations array
+    app.map = new google.maps.Map(document.getElementById('map'), {
+      center: data[0].location,
+      zoom: 15
+    });
+
+    google.maps.event.addDomListener(window, 'resize', function() {
+      google.maps.event.trigger(app.map, 'resize');
+    });
+
+    google.maps.event.addListener(app.map, 'resize', function() {
+      //had to use rAF as the resize hadn't finished before the below call, causing it not to fit properly
+      requestAnimationFrame(function() { app.map.fitBounds(app.mapBounds); });
+    });
+
+    //create our makers
+    data.forEach((item, index) => {
+
+      var location = new app.Location(item);
+      location.marker = new google.maps.Marker({
+        map: app.map,
+        position: item.location,
+        title: item.title,
+        animation: google.maps.Animation.DROP,
+        id: index
+      });
+
+      location.marker.addListener('click', function() {
+        self.selectedLocation(self.locations()[this.id]);
+        populateInfoWindow(this, app.infowindow);
+      });
+
+      self.locations.push(location);
+    });
+  }
+
+  //animate the marker and show the infowindow when the selected location changes
   ko.computed(function() {
-    const marker = self.selectedLocation().marker;
+    const location = self.selectedLocation();
+    if (!location) { return; }
+    const marker = location.marker;
     animateMarker(marker);
     populateInfoWindow(marker, app.infowindow);
   });
-
-  //load the first location
-  this.selectLocation(function() { return 0; });
 
   //load address and wikipedia data when selected location changes, and store it on location obj
   ko.computed(function() {
@@ -125,73 +198,143 @@ app.ViewModel = function() {
     //exit if we've already loaded the data for this location
     if (location.loaded) { return; }
 
-    getLocalityInfoFromGoogle();
+    self.loadingStatus('Loading...');
 
-    //gets suburb etc for location and update ViewModels with address and then calls loadWikipediaData
+    //update ViewModel with wikipedia snippet or foursquare info.
     //update ViewModel with with error messages based on where failure occurs.
-    function getLocalityInfoFromGoogle() {
+    if (location.getDataFrom === 'Wikipedia') {
 
-      self.loadingStatus('Loading...');
-
-      const googleGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${location.lat()},${location.lng()}&key=AIzaSyAFc11aYXpKunavDkM8nxAI0rZyn--Z7fk`;
-
-      fetch(googleGeocodeUrl).then(resp => {
-        if (resp.ok) {
-          return resp.json();
-        } else {
-          throw 'Failed to retrieve location data.';
-        }
-      }).then(data => {
-
-        try {
-
-          const localityAreaCountry = data.results[0].address_components.reduce((acc, item, index) => {
-            if (item.types.includes('locality')) { acc.locality = item.long_name; }
-            if (item.types.includes('administrative_area_level_1')) { acc.area = item.long_name; }
-            if (item.types.includes('country')) { acc.country = item.long_name; }
-            return acc;
-          }, {});
-
-          location.address(data.results[0].formatted_address);
-
-          loadWikipediaData(localityAreaCountry);
-
-        } catch (err) {
-          throw 'Failed to parse location data.';
-        }
+      getInfoFromWikipedia().then(data => {
+        location.wikipediaSnippet(data);
+        location.loaded = true;
+        self.loadingStatus('');
+      }).catch(err => {
+        self.loadingStatus(err + ' Try refreshing.');
+      });
+    } else {
+      getInfoFromFoursquare().then(data => {
+        location.foursquareInfo(data);
+        location.loaded = true;
+        self.loadingStatus('');
       }).catch(err => {
         self.loadingStatus(err + ' Try refreshing.');
       });
     }
 
-    //update ViewModel with wikipedia snippet for the supplied locality, area, and country.
-    //update ViewModel with with error messages based on where failure occurs.
-    function loadWikipediaData(lAC) {
+    function getInfoFromFoursquare() {
+
+      const foursquareExploreUrl = `https://api.foursquare.com/v2/venues/explore?ll=${location.lat()},${location.lng()}` +
+        `&sortByDistance=1&venuePhotos=1&radius=20` +
+        `&client_id=${app.foursquareKeys.CLIENT_ID}&client_secret=${app.foursquareKeys.CLIENT_SECRET}&v=20170905`;
+
+      return fetch(foursquareExploreUrl).then(resp => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            throw 'Failed to retrieve Foursquare venue data.';
+          }
+        })
+        .catch(err => {
+          throw 'Foursquare: ' + err;
+        })
+        .then(data => {
+
+          try {
+
+            const venue = data.response.groups[0].items[0].venue;
+
+            var foursquareInfo = `${venue.categories[0].name}. `;
+            if (venue.price) { foursquareInfo += `${venue.price.message}. `; }
+            if (venue.rating) { foursquareInfo += `${venue.rating} rating.`; }
+
+            if (venue.photos.count) {
+              const photo = venue.photos.groups[0].items[0];
+              foursquareInfo += `<br><img class="venue-img" src="${photo.prefix}width320${photo.suffix}"/>`;
+            }
+
+            foursquareInfo += `<br><a href="//foursquare.com/v/${venue.id}">[Fourquare]</a>`;
+
+            return foursquareInfo;
+          } catch (err) {
+            throw 'Failed to parse Foursquare venue data.';
+          }
+        });
+    }
+
+    function getInfoFromWikipedia() {
 
       const wikipediaUrl = 'https://en.wikipedia.org/w/api.php?&origin=*&action=query&list=search&format=json&srsearch=';
 
-      fetch(`${wikipediaUrl}${lAC.locality}+,${lAC.area}+,${lAC.country}`).then(function(resp) {
-        if (resp.ok) {
-          return resp.json();
-        } else {
-          throw 'Failed to retrieve Wikpedia snippet.';
-        }
-      }).then(function(data) {
-        try {
-          const locationResult = data.query.search[0];
-          const locationPageLink = `<a href="${'https:\/\/en.wikipedia.org\/wiki\/' + locationResult.title.replace(' ', '_')}">... [Wikipedia]</a>`;
-          location.wikipediaIntro(locationResult.snippet + locationPageLink);
-          location.loaded = true;
-          self.loadingStatus('');
-        } catch (err) {
-          throw 'Failed to parse Wikpedia snippet.';
-        }
-      }).catch(err => {
-        self.loadingStatus(err + ' Try refreshing.');
+      return getLocalityInfoFromGoogle().then(lAC => {
+        return fetch(`${wikipediaUrl}${lAC.locality}+,${lAC.area}+,${lAC.country}`).then(resp => {
+            if (resp.ok) {
+              return resp.json();
+            } else {
+              throw 'Failed to retrieve Wikpedia snippet.';
+            }
+          })
+          .catch(err => {
+            throw 'Wikipedia: ' + err;
+          })
+          .then(data => {
+            try {
+
+              //try to find an exact match for the locality-area and article title
+              var locationResult = data.query.search.find((item, index) => {
+                return item.title === `${lAC.locality}, ${lAC.area}`;
+              });
+
+              //if no exact match, just use the first result
+              if (!locationResult) { locationResult = data.query.search[0]; }
+
+              const locationPageLink = `<a href="${'https:\/\/en.wikipedia.org\/wiki\/' +
+              locationResult.title.replace(' ', '_')}">... [Wikipedia]</a>`;
+              return locationResult.snippet + locationPageLink;
+            } catch (err) {
+              throw 'Failed to parse Wikpedia snippet.';
+            }
+          });
       });
 
     }
-  }, this);
+
+    //gets suburb etc for location
+    function getLocalityInfoFromGoogle() {
+
+      const googleGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=` +
+        `${location.lat()},${location.lng()}&key=AIzaSyAFc11aYXpKunavDkM8nxAI0rZyn--Z7fk`;
+
+      return fetch(googleGeocodeUrl).then(resp => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            throw 'Failed to retrieve location data from Google Maps.';
+          }
+        })
+        .catch(err => {
+          throw 'Google Maps: ' + err;
+        })
+        .then(data => {
+
+          try {
+
+            const localityAreaCountry = data.results[0].address_components.reduce((acc, item, index) => {
+              if (item.types.includes('locality')) { acc.locality = item.long_name; }
+              if (item.types.includes('administrative_area_level_1')) { acc.area = item.long_name; }
+              if (item.types.includes('country')) { acc.country = item.long_name; }
+              return acc;
+            }, {});
+
+            location.address(data.results[0].formatted_address);
+
+            return localityAreaCountry;
+          } catch (err) {
+            throw 'Failed to parse location data from Google Maps.';
+          }
+        });
+
+    }
+  }, self);
 
   //animate markers for a period
   //cancels any markers that are already bouncing when called
