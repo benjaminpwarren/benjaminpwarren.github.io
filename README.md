@@ -19,6 +19,7 @@ As locations.json is now fetch'ed, it's not possible to run this with the file U
 3. Open a terminal and go to the folder.
 4. Run `npm install http-server -g` (check http-server options if you need to choose a specific port).
 5. Run `http-server`.
+6. Open browser to one of the addresses output from the previous command.
 
 Note: http-server is not listed as a dependency in a package.json file as it's the kind of thing one installs
 globally AND you might choose to use different software to run a server. The software is irrelevant, it's just
