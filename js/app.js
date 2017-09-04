@@ -22,7 +22,7 @@ app.initMap = function() {
   app.infowindow = new google.maps.InfoWindow();
 
   ko.applyBindings(new app.ViewModel());
-}
+};
 
 document.addEventListener('DOMContentLoaded', function(event) {
   //click handler for options box minimize toggle
@@ -102,7 +102,7 @@ app.ViewModel = function() {
   //change selectedLocation and animate location's marker
   this.selectLocation = function(locationIndex) {
     self.selectedLocation(self.filteredLocations()[locationIndex()]);
-  }
+  };
 
   //animate the marker when the selected location changes
   ko.computed(function() {
@@ -133,7 +133,7 @@ app.ViewModel = function() {
 
       self.loadingStatus('Loading...');
 
-      const googleGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${location.lat()},${location.lng()}&key=AIzaSyAFc11aYXpKunavDkM8nxAI0rZyn--Z7fk`
+      const googleGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${location.lat()},${location.lng()}&key=AIzaSyAFc11aYXpKunavDkM8nxAI0rZyn--Z7fk`;
 
       fetch(googleGeocodeUrl).then(resp => {
         if (resp.ok) {
@@ -160,7 +160,7 @@ app.ViewModel = function() {
           throw 'Failed to parse location data.';
         }
       }).catch(err => {
-        self.loadingStatus(err + ' Try refreshing.')
+        self.loadingStatus(err + ' Try refreshing.');
       });
     }
 
@@ -187,8 +187,8 @@ app.ViewModel = function() {
           throw 'Failed to parse Wikpedia snippet.';
         }
       }).catch(err => {
-        self.loadingStatus(err + ' Try refreshing.')
-      })
+        self.loadingStatus(err + ' Try refreshing.');
+      });
 
     }
   }, this);
@@ -198,7 +198,7 @@ app.ViewModel = function() {
   function animateMarker(marker) {
 
     //cancel any existing bouncing
-    self.lastMarker && self.lastMarker.setAnimation(null)
+    self.lastMarker && self.lastMarker.setAnimation(null);
 
     marker.setAnimation(google.maps.Animation.BOUNCE);
 
@@ -230,4 +230,4 @@ app.ViewModel = function() {
     }
   }
 
-}
+};
