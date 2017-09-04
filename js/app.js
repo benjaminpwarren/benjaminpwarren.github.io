@@ -106,7 +106,9 @@ app.ViewModel = function() {
 
   //animate the marker when the selected location changes
   ko.computed(function() {
-    animateMarker(self.selectedLocation().marker);
+    const marker = self.selectedLocation().marker;
+    animateMarker(marker);
+    populateInfoWindow(marker, app.infowindow);
   });
 
   //load the first location
