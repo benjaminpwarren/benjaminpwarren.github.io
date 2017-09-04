@@ -22,12 +22,15 @@
       <ul class="unstyled-list" data-bind="foreach: filteredLocations">
         <li data-bind="click: $parent.selectLocation.bind($data, $index), text: title" class="padding-vert-sm clickable linkish"></li>
       </ul>
+      <!-- ko ifnot: filteredLocations().length -->
+        No matches.
+      <!-- /ko -->
       <div data-bind="with: selectedLocation()">
         <h2 data-bind="text: title"></h2>
         <p>
           (lat: <span data-bind="text: lat"></span>, lng: <span data-bind="text: lng"></span>)
         </p>
-        <!-- ko if: wikipediaIntro -->
+        <!-- ko if: address -->
         <p data-bind="text: address"></p>
         <!-- /ko -->
         <!-- ko if: wikipediaIntro -->

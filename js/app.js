@@ -38,13 +38,6 @@ app.Location = function(data) {
   this.wikipediaIntro = ko.observable('');
   this.loaded = false;
 
-  this.marker = new google.maps.Marker({
-    map: app.map,
-    position: data.location,
-    title: data.title,
-    animation: google.maps.Animation.DROP
-  });
-
 };
 
 app.ViewModel = function() {
@@ -53,7 +46,21 @@ app.ViewModel = function() {
 
   this.locations = ko.observableArray([]);
   app.initialLocations.forEach(function(item, index) {
-    self.locations.push(new app.Location(item));
+
+    var location = new app.Location(item);
+    location.marker = new google.maps.Marker({
+      map: app.map,
+      position: item.location,
+      title: item.title,
+      animation: google.maps.Animation.DROP,
+      id: index
+    });
+
+    location.marker.addListener('click', function() {
+      self.selectedLocation(self.locations()[this.id]);
+    });
+
+    self.locations.push(location);
   });
 
   this.selectedLocation = ko.observable();
@@ -61,13 +68,13 @@ app.ViewModel = function() {
   //show a loading message while we're getting async data
   this.loadingStatus = ko.observable('Loading...');
 
-  //filters list and adjusts markers input
+  //filters list and adjusts markers based on input
   this.filter = ko.observable();
   this.filteredLocations = ko.computed(function() {
 
     var bounds = new google.maps.LatLngBounds();
 
-    const filtered = this.locations().filter(function(location) {
+    const filtered = this.locations().filter(function(location, index) {
       if (!self.filter() || location.title().toLowerCase().indexOf(self.filter().toLowerCase()) !== -1) {
         location.marker.setMap(app.map);
         bounds.extend(location.marker.position);
@@ -77,13 +84,14 @@ app.ViewModel = function() {
       }
     });
 
+    //fit all of the markers on the map, but with a maximum zoom of 15
     app.map.fitBounds(bounds);
     app.map.setZoom(Math.min(app.map.getZoom(), 15));
 
     return filtered;
   }, this);
 
-  //show first location after filtering
+  //select first location after filtering
   ko.computed(function() {
     self.selectedLocation(self.filteredLocations()[0]);
   }, this);
@@ -91,8 +99,12 @@ app.ViewModel = function() {
   //change selectedLocation and animate location's marker
   this.selectLocation = function(locationIndex) {
     self.selectedLocation(self.filteredLocations()[locationIndex()]);
-    animateMarker(self.selectedLocation().marker);
   }
+
+  //animate the marker when the selected location changes
+  ko.computed(function() {
+    animateMarker(self.selectedLocation().marker);
+  });
 
   //load the first location
   this.selectLocation(function() { return 0; });
@@ -102,10 +114,16 @@ app.ViewModel = function() {
 
     const location = self.selectedLocation();
 
+    //exit if there is no selected location (e.g. if a user has entered a filter that has no results)
+    if (typeof location === 'undefined') { return; }
+
+    //exit if we've already loaded the data for this location
     if (location.loaded) { return; }
 
     getLocalityInfoFromGoogle();
 
+    //gets suburb etc for location and update ViewModels with address and then calls loadWikipediaData
+    //update ViewModel with with error messages based on where failure occurs.
     function getLocalityInfoFromGoogle() {
 
       self.loadingStatus('Loading...');
@@ -121,6 +139,7 @@ app.ViewModel = function() {
       }).then(data => {
 
         try {
+
           const localityAreaCountry = data.results[0].address_components.reduce((acc, item, index) => {
             if (item.types.includes('locality')) { acc.locality = item.long_name; }
             if (item.types.includes('administrative_area_level_1')) { acc.area = item.long_name; }
@@ -128,9 +147,10 @@ app.ViewModel = function() {
             return acc;
           }, {});
 
-          self.selectedLocation().address(data.results[0].formatted_address);
+          location.address(data.results[0].formatted_address);
 
           loadWikipediaData(localityAreaCountry);
+
         } catch (err) {
           throw 'Failed to parse location data.';
         }
@@ -139,6 +159,8 @@ app.ViewModel = function() {
       });
     }
 
+    //update ViewModel with wikipedia snippet for the supplied locality, area, and country.
+    //update ViewModel with with error messages based on where failure occurs.
     function loadWikipediaData(lAC) {
 
       const wikipediaUrl = 'https://en.wikipedia.org/w/api.php?&origin=*&action=query&list=search&format=json&srsearch=';
@@ -152,12 +174,12 @@ app.ViewModel = function() {
       }).then(function(data) {
         try {
           const locationResult = data.query.search[0];
-          const locationPageLink = `<a href="${'https:\/\/en.wikipedia.org\/wiki\/' + locationResult.title.replace(' ', '_')}">...</a>`;
-          self.selectedLocation().wikipediaIntro(locationResult.snippet + locationPageLink);
-          self.selectedLocation().loaded = true;
+          const locationPageLink = `<a href="${'https:\/\/en.wikipedia.org\/wiki\/' + locationResult.title.replace(' ', '_')}">... [Wikipedia]</a>`;
+          location.wikipediaIntro(locationResult.snippet + locationPageLink);
+          location.loaded = true;
           self.loadingStatus('');
         } catch (err) {
-          throw 'Failed to retrieve Wikpedia snippet.';
+          throw 'Failed to parse Wikpedia snippet.';
         }
       }).catch(err => {
         self.loadingStatus(err + ' Try refreshing.')
@@ -166,6 +188,9 @@ app.ViewModel = function() {
     }
   }, this);
 
+
+  //animate markers for a period
+  //cancels any markers that are already bouncing when called
   function animateMarker(marker) {
 
     //cancel any existing bouncing

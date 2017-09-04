@@ -20,11 +20,11 @@ html {
 }
 
 .options-box {
-  height: 75%;
   position: absolute;
   right: 0px;
   z-index: 1;
   top: 50px;
+  width: calc(100% - 10px * 2); /* "hack" because box-sizing not working with width:100% for some reason */
   max-width: 100%;
   background-color: rgba(220, 220, 220, .85);
   /* border-radius to margin liberated from Google's styles */
@@ -64,7 +64,6 @@ html {
   .options-box {
     padding: 8px;
     width: 33%;
-    height: 50%;
   }
 
   .options-box-minimized {
