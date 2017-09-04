@@ -9,8 +9,11 @@ The Locations sidebar list can be filtered based on title with the text input fi
 
 ## Running
 
+Go to http://benjaminpwarren.github.io OR run it on a local machine with a http server.
+
 As locations.json is now fetch'ed, it's not possible to run this with the file URI scheme, a server is needed.
 
+### Local Http Server Example
 1. Make sure you have node and npm installed.
 2. Extract the files to a folder.
 3. Open a terminal and go to the folder.
