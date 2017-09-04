@@ -19,6 +19,8 @@ app.initMap = function() {
     zoom: 15
   });
 
+  app.infowindow = new google.maps.InfoWindow();
+
   ko.applyBindings(new app.ViewModel());
 }
 
@@ -58,6 +60,7 @@ app.ViewModel = function() {
 
     location.marker.addListener('click', function() {
       self.selectedLocation(self.locations()[this.id]);
+      populateInfoWindow(this, app.infowindow);
     });
 
     self.locations.push(location);
@@ -188,7 +191,6 @@ app.ViewModel = function() {
     }
   }, this);
 
-
   //animate markers for a period
   //cancels any markers that are already bouncing when called
   function animateMarker(marker) {
@@ -207,6 +209,23 @@ app.ViewModel = function() {
 
     //remember the marker so we can cancel its bouncing if the user changes selection
     self.lastMarker = marker;
+  }
+
+  // This function populates the infowindow when the marker is clicked. We'll only allow
+  // one infowindow which will open at the marker that is clicked, and populate based
+  // on that markers position.
+  // Copied from previous Udacity lessons
+  function populateInfoWindow(marker, infowindow) {
+    // Check to make sure the infowindow is not already opened on this marker.
+    if (infowindow.marker != marker) {
+      infowindow.marker = marker;
+      infowindow.setContent(`<strong>${marker.title}</strong><br><small>See the Locations sidebar for more info.</small>`);
+      infowindow.open(map, marker);
+      // Make sure the marker property is cleared if the infowindow is closed.
+      infowindow.addListener('closeclick', function() {
+        infowindow.setMarker = null;
+      });
+    }
   }
 
 }
