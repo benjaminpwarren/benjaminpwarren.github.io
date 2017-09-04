@@ -18,7 +18,7 @@
       <br>
       <!-- ko if: $data.filteredLocations -->
       <label>Filter:
-        <input data-bind="textInput: filter" placeholder="e.g. Work"></input>
+        <input data-bind="textInput: filter" placeholder="e.g. Work">
       </label>
       <ul class="unstyled-list" data-bind="foreach: filteredLocations">
         <li data-bind="click: $parent.selectLocation.bind($data, $index), text: title" class="padding-vert-sm clickable linkish"></li>
